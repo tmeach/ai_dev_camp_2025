@@ -118,4 +118,4 @@ What's the command you use for running tests in the terminal?
 
 
 #### Answer: 
-- 
+- python manage.py test
