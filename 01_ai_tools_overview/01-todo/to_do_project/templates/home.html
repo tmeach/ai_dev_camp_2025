@@ -1,0 +1,40 @@
+<!-- templates/home.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>To-Do List</h1>
+    
+    <!-- Форма добавления задачи -->
+    <form method="post" action="{% url 'todo:add_task' %}">
+        {% csrf_token %}
+        <input type="text" name="title" placeholder="Новая задача..." required>
+        <button type="submit">Добавить</button>
+    </form>
+
+    <!-- Список задач -->
+    <ul>
+        {% for task in tasks %}
+        <li>
+            <!-- Чекбокс выполнения -->
+            <form method="post" action="{% url 'todo:toggle_task' task.id %}" style="display: inline;">
+                {% csrf_token %}
+                <input type="checkbox" onchange="this.form.submit()" 
+                       {% if task.completed %}checked{% endif %}>
+            </form>
+            
+            <!-- Текст задачи -->
+            <span style="{% if task.completed %}text-decoration: line-through; color: gray;{% endif %}">
+                {{ task.title }}
+            </span>
+            
+            <!-- Кнопка удаления -->
+            <form method="post" action="{% url 'todo:delete_task' task.id %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit">×</button>
+            </form>
+        </li>
+        {% empty %}
+        <li>Нет задач. Добавьте первую!</li>
+        {% endfor %}
+    </ul>
+{% endblock %}
