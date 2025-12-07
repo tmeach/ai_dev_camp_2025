@@ -1,0 +1,330 @@
+openapi: 3.0.0
+info:
+  title: Online Code Interview Platform API
+  description: |
+    Real-time coding interview platform with WebSocket support.
+    Allows multiple users to edit code simultaneously.
+  version: 1.0.0
+  contact:
+    name: Development Team
+    email: dev@interview-platform.com
+
+servers:
+  - url: http://localhost:3001
+    description: Development server
+  - url: https://api.interview-platform.com
+    description: Production server
+
+tags:
+  - name: Rooms
+    description: Room management for interviews
+  - name: Code
+    description: Code execution and management
+  - name: WebSocket
+    description: Real-time communication
+
+paths:
+  # Room management
+  /api/rooms:
+    post:
+      tags: [Rooms]
+      summary: Create a new interview room
+      operationId: createRoom
+      responses:
+        '201':
+          description: Room created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '400':
+          description: Invalid request
+          
+    get:
+      tags: [Rooms]
+      summary: Get all active rooms
+      operationId: getRooms
+      responses:
+        '200':
+          description: List of active rooms
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Room'
+
+  /api/rooms/{roomId}:
+    get:
+      tags: [Rooms]
+      summary: Get room information
+      operationId: getRoom
+      parameters:
+        - name: roomId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Room ID
+      responses:
+        '200':
+          description: Room information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '404':
+          description: Room not found
+
+    delete:
+      tags: [Rooms]
+      summary: Delete a room
+      operationId: deleteRoom
+      parameters:
+        - name: roomId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Room deleted successfully
+        '404':
+          description: Room not found
+
+  # Code execution
+  /api/execute:
+    post:
+      tags: [Code]
+      summary: Execute code safely
+      operationId: executeCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodeExecutionRequest'
+      responses:
+        '200':
+          description: Code executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeExecutionResponse'
+        '400':
+          description: Invalid code or language
+        '500':
+          description: Execution error
+
+components:
+  schemas:
+    Room:
+      type: object
+      required:
+        - id
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: Unique room identifier
+          example: "abc123def"
+        createdAt:
+          type: string
+          format: date-time
+          description: Room creation timestamp
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Participant'
+        language:
+          type: string
+          enum: [javascript, python, java, cpp, c]
+          default: javascript
+          description: Current programming language
+        code:
+          type: string
+          description: Current code content
+        isActive:
+          type: boolean
+          default: true
+          description: Whether the room is active
+
+    Participant:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Participant socket ID
+        role:
+          type: string
+          enum: [interviewer, candidate]
+          description: Participant role
+        joinedAt:
+          type: string
+          format: date-time
+
+    CodeExecutionRequest:
+      type: object
+      required:
+        - code
+        - language
+      properties:
+        code:
+          type: string
+          description: Source code to execute
+          example: "console.log('Hello');"
+        language:
+          type: string
+          enum: [javascript, python, java, cpp, c]
+          description: Programming language
+        roomId:
+          type: string
+          description: Room ID for context
+          required: false
+
+    CodeExecutionResponse:
+      type: object
+      properties:
+        output:
+          type: string
+          description: Standard output
+        error:
+          type: string
+          description: Error output if any
+        executionTime:
+          type: number
+          format: float
+          description: Execution time in milliseconds
+        success:
+          type: boolean
+          description: Whether execution was successful
+
+    WebSocketMessage:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [code-change, language-change, user-joined, user-left, cursor-position, execution-result]
+          description: Type of WebSocket event
+        roomId:
+          type: string
+          description: Target room ID
+        data:
+          type: object
+          description: Event-specific data
+        timestamp:
+          type: string
+          format: date-time
+          description: Message timestamp
+        senderId:
+          type: string
+          description: Sender's socket ID
+
+  # WebSocket events documentation
+  websocket:
+    events:
+      # Client to Server events
+      client:
+        - event: join-room
+          description: Join a specific room
+          data:
+            roomId: string
+            role: string
+          
+        - event: code-change
+          description: Send code changes to room
+          data:
+            roomId: string
+            code: string
+            compressedCode: string
+            changeOrigin: string
+          
+        - event: language-change
+          description: Change programming language
+          data:
+            roomId: string
+            language: string
+          
+        - event: execute-code
+          description: Request code execution
+          data:
+            roomId: string
+            code: string
+            language: string
+          
+        - event: cursor-position
+          description: Send cursor position
+          data:
+            roomId: string
+            position:
+              line: integer
+              column: integer
+          
+        - event: leave-room
+          description: Leave the current room
+          data:
+            roomId: string
+
+      # Server to Client events  
+      server:
+        - event: code-update
+          description: Broadcast code changes to all room members
+          data:
+            roomId: string
+            code: string
+            compressedCode: string
+            senderId: string
+            timestamp: string
+          
+        - event: language-updated
+          description: Notify about language change
+          data:
+            roomId: string
+            language: string
+          
+        - event: user-joined
+          description: Notify when user joins room
+          data:
+            roomId: string
+            userId: string
+            role: string
+            participantsCount: integer
+          
+        - event: user-left
+          description: Notify when user leaves room
+          data:
+            roomId: string
+            userId: string
+            participantsCount: integer
+          
+        - event: execution-result
+          description: Send code execution result
+          data:
+            roomId: string
+            output: string
+            error: string
+            success: boolean
+          
+        - event: cursor-update
+          description: Update cursor position of other users
+          data:
+            roomId: string
+            userId: string
+            position:
+              line: integer
+              column: integer
+          
+        - event: room-closed
+          description: Notify that room was closed by interviewer
+          data:
+            roomId: string
+            reason: string
+
+securitySchemes:
+  ApiKeyAuth:
+    type: apiKey
+    in: header
+    name: X-API-Key
+  BearerAuth:
+    type: http
+    scheme: bearer
