@@ -105,6 +105,101 @@ docker rm interview-platform
 - ✅ Автоматический restart при падении
 - ✅ Минимальный размер образа (Node.js Alpine)
 
+#### Вариант 4: Развертывание на Render (production)
+
+**Требования:**
+- Аккаунт на [Render.com](https://render.com)
+- Репозиторий на GitHub с вашим кодом
+
+**Автоматическое развертывание (рекомендуется):**
+
+1. **Подготовка репозитория:**
+   ```bash
+   # Убедитесь что все изменения закоммичены
+   git add .
+   git commit -m "Add Render configuration"
+   git push origin main
+   ```
+
+2. **Создание сервиса на Render:**
+   - Перейдите на [dashboard.render.com](https://dashboard.render.com)
+   - Нажмите "New +" → "Web Service"
+   - Подключите ваш GitHub репозиторий
+   - Выберите ветку (обычно `main` или `master`)
+   - Render автоматически обнаружит `render.yaml` и настроит сервис
+
+3. **Настройки будут применены автоматически из `render.yaml`:**
+   - **Name**: interview-platform
+   - **Environment**: Docker
+   - **Region**: Frankfurt (или выберите ближайший)
+   - **Plan**: Free
+   - **Environment Variables**:
+     - `NODE_ENV=production`
+     - `PORT=3001`
+
+4. **Деплой:**
+   - Render автоматически начнет сборку Docker образа
+   - Процесс займет 5-10 минут
+   - После завершения вы получите URL вида: `https://interview-platform-xxxx.onrender.com`
+
+**Ручное развертывание:**
+
+1. Войдите на [dashboard.render.com](https://dashboard.render.com)
+2. Нажмите "New +" → "Web Service"
+3. Выберите "Deploy from Git repository"
+4. Подключите GitHub и выберите репозиторий
+5. Настройте параметры:
+   - **Name**: `interview-platform`
+   - **Region**: `Frankfurt` (или ближайший к вам)
+   - **Branch**: `main` (или ваша ветка)
+   - **Root Directory**: `02_end_to_end_project` (если проект в подпапке)
+   - **Environment**: `Docker`
+   - **Dockerfile Path**: `./Dockerfile`
+   - **Docker Build Context Directory**: `.`
+   - **Plan**: `Free`
+6. Добавьте Environment Variables:
+   - `NODE_ENV` = `production`
+   - `PORT` = `3001`
+7. Нажмите "Create Web Service"
+
+**Автоматические обновления:**
+- Render автоматически пересобирает и деплоит при каждом push в выбранную ветку
+- Можно настроить деплой только при изменениях в определенной папке
+
+**Мониторинг:**
+- Логи доступны в реальном времени в Render Dashboard
+- Health check автоматически проверяет `/api/health` каждые 30 секунд
+- Автоматический restart при падении сервиса
+
+**Особенности Render Free Plan:**
+- ✅ Бесплатный SSL сертификат (HTTPS)
+- ✅ Автоматические деплои из Git
+- ✅ 750 часов в месяц (достаточно для одного сервиса 24/7)
+- ⚠️ Сервис "засыпает" после 15 минут неактивности
+- ⚠️ "Пробуждение" занимает 30-60 секунд при первом запросе
+- ⚠️ 512 MB RAM (достаточно для нашего приложения)
+
+**Troubleshooting Render:**
+
+1. **Сборка не запускается:**
+   - Проверьте что `render.yaml` находится в корне репозитория или в Root Directory
+   - Проверьте что `Dockerfile` доступен по указанному пути
+
+2. **Ошибка при сборке Docker:**
+   - Проверьте логи сборки в Render Dashboard
+   - Убедитесь что `.dockerignore` правильно настроен
+   - Попробуйте собрать локально: `docker build -t test .`
+
+3. **Сервис не отвечает:**
+   - Проверьте логи в Render Dashboard → Logs
+   - Убедитесь что приложение слушает порт из переменной `PORT`
+   - Проверьте health check: `curl https://your-app.onrender.com/api/health`
+
+4. **Медленный первый запрос:**
+   - Это нормально для Free Plan - сервис "просыпается"
+   - Для production используйте платный план (от $7/месяц)
+   - Или настройте внешний uptime monitor (например, UptimeRobot)
+
 ### Конфигурация
 
 #### Backend (.env)
