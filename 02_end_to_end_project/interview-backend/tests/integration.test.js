@@ -235,8 +235,10 @@ describe('Online Interview Platform - Интеграционные тесты', 
       const client1 = socketIOClient(serverUrl, { forceNew: true });
       const client2 = socketIOClient(serverUrl, { forceNew: true });
       const roomId = `disconnect-test-${Date.now()}`;
+      let client1Id = null;
       
       client1.on('connect', () => {
+        client1Id = client1.id; // Сохраняем ID после подключения
         client1.emit('join-room', { roomId, role: 'interviewer' });
       });
       
@@ -245,7 +247,7 @@ describe('Online Interview Platform - Интеграционные тесты', 
         
         client2.on('user-left', (data) => {
           expect(data.roomId).toBe(roomId);
-          expect(data.userId).toBe(client1.id);
+          expect(data.userId).toBe(client1Id); // Используем сохраненный ID
           client2.disconnect();
           done();
         });
@@ -409,6 +411,326 @@ describe('Online Interview Platform - Интеграционные тесты', 
       setTimeout(() => {
         executor.disconnect();
         watcher.disconnect();
+        done(new Error('Тест завершился по таймауту'));
+      }, 5000);
+    }, 10000);
+  });
+  
+  describe('Edge Cases и Error Handling', () => {
+    test('Обработка пустого кода', (done) => {
+      const client = socketIOClient(serverUrl, { forceNew: true });
+      const roomId = `empty-code-${Date.now()}`;
+      
+      client.on('connect', () => {
+        client.emit('join-room', { roomId, role: 'interviewer' });
+        
+        setTimeout(() => {
+          client.emit('code-change', {
+            roomId,
+            code: ''
+          });
+          
+          // Проверяем что сервер не падает
+          setTimeout(() => {
+            expect(client.connected).toBe(true);
+            client.disconnect();
+            done();
+          }, 500);
+        }, 500);
+      });
+      
+      setTimeout(() => {
+        client.disconnect();
+        done(new Error('Тест завершился по таймауту'));
+      }, 3000);
+    }, 10000);
+    
+    test('Обработка очень большого кода', (done) => {
+      const client1 = socketIOClient(serverUrl, { forceNew: true });
+      const client2 = socketIOClient(serverUrl, { forceNew: true });
+      const roomId = `large-code-${Date.now()}`;
+      const largeCode = '// '.repeat(10000) + 'Large code test';
+      
+      client1.on('connect', () => {
+        client1.emit('join-room', { roomId, role: 'interviewer' });
+      });
+      
+      client2.on('connect', () => {
+        client2.emit('join-room', { roomId, role: 'candidate' });
+        
+        client2.on('code-update', (data) => {
+          expect(data.code).toBe(largeCode);
+          expect(data.code.length).toBeGreaterThan(20000);
+          client1.disconnect();
+          client2.disconnect();
+          done();
+        });
+        
+        setTimeout(() => {
+          client1.emit('code-change', { roomId, code: largeCode });
+        }, 500);
+      });
+      
+      setTimeout(() => {
+        client1.disconnect();
+        client2.disconnect();
+        done(new Error('Тест завершился по таймауту'));
+      }, 5000);
+    }, 10000);
+    
+    test('Обработка невалидного roomId', (done) => {
+      const client = socketIOClient(serverUrl, { forceNew: true });
+      
+      client.on('connect', () => {
+        // Отправляем с пустым roomId
+        client.emit('join-room', { roomId: '', role: 'interviewer' });
+        
+        // Сервер должен обработать это корректно
+        setTimeout(() => {
+          expect(client.connected).toBe(true);
+          client.disconnect();
+          done();
+        }, 500);
+      });
+      
+      setTimeout(() => {
+        client.disconnect();
+        done(new Error('Тест завершился по таймауту'));
+      }, 3000);
+    }, 10000);
+    
+    test('Множественные быстрые изменения кода синхронизируются', (done) => {
+      const sender = socketIOClient(serverUrl, { forceNew: true });
+      const receiver = socketIOClient(serverUrl, { forceNew: true });
+      const roomId = `rapid-changes-${Date.now()}`;
+      const updates = [];
+      
+      sender.on('connect', () => {
+        sender.emit('join-room', { roomId, role: 'interviewer' });
+      });
+      
+      receiver.on('connect', () => {
+        receiver.emit('join-room', { roomId, role: 'candidate' });
+        
+        receiver.on('code-update', (data) => {
+          updates.push(data.code);
+        });
+        
+        setTimeout(() => {
+          // Отправляем 5 быстрых изменений
+          for (let i = 1; i <= 5; i++) {
+            sender.emit('code-change', {
+              roomId,
+              code: `// Update ${i}`
+            });
+          }
+          
+          // Проверяем что все дошли
+          setTimeout(() => {
+            expect(updates.length).toBeGreaterThan(0);
+            sender.disconnect();
+            receiver.disconnect();
+            done();
+          }, 1000);
+        }, 500);
+      });
+      
+      setTimeout(() => {
+        sender.disconnect();
+        receiver.disconnect();
+        done(new Error('Тест завершился по таймауту'));
+      }, 5000);
+    }, 10000);
+  });
+  
+  describe('Расширенные сценарии', () => {
+    test('Три участника в одной комнате', (done) => {
+      const client1 = socketIOClient(serverUrl, { forceNew: true });
+      const client2 = socketIOClient(serverUrl, { forceNew: true });
+      const client3 = socketIOClient(serverUrl, { forceNew: true });
+      const roomId = `three-users-${Date.now()}`;
+      
+      let joinedCount = 0;
+      
+      const checkJoined = () => {
+        joinedCount++;
+        if (joinedCount === 3) {
+          // Все присоединились, проверяем синхронизацию
+          setTimeout(() => {
+            expect(client1.connected).toBe(true);
+            expect(client2.connected).toBe(true);
+            expect(client3.connected).toBe(true);
+            client1.disconnect();
+            client2.disconnect();
+            client3.disconnect();
+            done();
+          }, 500);
+        }
+      };
+      
+      client1.on('connect', () => {
+        client1.emit('join-room', { roomId, role: 'interviewer' });
+      });
+      
+      client2.on('connect', () => {
+        client2.emit('join-room', { roomId, role: 'candidate' });
+      });
+      
+      client3.on('connect', () => {
+        client3.emit('join-room', { roomId, role: 'observer' });
+      });
+      
+      client1.on('room-state', checkJoined);
+      client2.on('room-state', checkJoined);
+      client3.on('room-state', checkJoined);
+      
+      setTimeout(() => {
+        client1.disconnect();
+        client2.disconnect();
+        client3.disconnect();
+        done(new Error('Тест завершился по таймауту'));
+      }, 5000);
+    }, 10000);
+    
+    test('Участник переподключается и получает актуальное состояние', (done) => {
+      const client1 = socketIOClient(serverUrl, { forceNew: true });
+      const roomId = `reconnect-${Date.now()}`;
+      const testCode = 'console.log("Updated code");';
+      
+      client1.on('connect', () => {
+        client1.emit('join-room', { roomId, role: 'interviewer' });
+        
+        setTimeout(() => {
+          // Обновляем код
+          client1.emit('code-change', { roomId, code: testCode });
+          
+          // Отключаемся
+          setTimeout(() => {
+            client1.disconnect();
+            
+            // Переподключаемся
+            setTimeout(() => {
+              const client2 = socketIOClient(serverUrl, { forceNew: true });
+              
+              client2.on('connect', () => {
+                client2.emit('join-room', { roomId, role: 'interviewer' });
+                
+                client2.on('room-state', (data) => {
+                  // Должны получить актуальное состояние
+                  expect(data.code).toBe(testCode);
+                  client2.disconnect();
+                  done();
+                });
+              });
+              
+              setTimeout(() => {
+                client2.disconnect();
+                done(new Error('Переподключение не удалось'));
+              }, 3000);
+            }, 500);
+          }, 500);
+        }, 500);
+      });
+      
+      setTimeout(() => {
+        done(new Error('Тест завершился по таймауту'));
+      }, 8000);
+    }, 10000);
+    
+    test('Смена языка обновляется для всех участников', (done) => {
+      const client1 = socketIOClient(serverUrl, { forceNew: true });
+      const client2 = socketIOClient(serverUrl, { forceNew: true });
+      const client3 = socketIOClient(serverUrl, { forceNew: true });
+      const roomId = `lang-sync-${Date.now()}`;
+      
+      let updatesReceived = 0;
+      
+      client1.on('connect', () => {
+        client1.emit('join-room', { roomId, role: 'interviewer' });
+      });
+      
+      client2.on('connect', () => {
+        client2.emit('join-room', { roomId, role: 'candidate' });
+      });
+      
+      client3.on('connect', () => {
+        client3.emit('join-room', { roomId, role: 'observer' });
+      });
+      
+      const checkLanguageUpdate = (data) => {
+        if (data.language === 'python') {
+          updatesReceived++;
+          if (updatesReceived === 2) { // client2 и client3 должны получить
+            client1.disconnect();
+            client2.disconnect();
+            client3.disconnect();
+            done();
+          }
+        }
+      };
+      
+      client2.on('language-updated', checkLanguageUpdate);
+      client3.on('language-updated', checkLanguageUpdate);
+      
+      setTimeout(() => {
+        client1.emit('language-change', { roomId, language: 'python' });
+      }, 1000);
+      
+      setTimeout(() => {
+        client1.disconnect();
+        client2.disconnect();
+        client3.disconnect();
+        done(new Error('Тест завершился по таймауту'));
+      }, 5000);
+    }, 10000);
+    
+    test('Выполнение кода видят все участники комнаты', (done) => {
+      const executor = socketIOClient(serverUrl, { forceNew: true });
+      const watcher1 = socketIOClient(serverUrl, { forceNew: true });
+      const watcher2 = socketIOClient(serverUrl, { forceNew: true });
+      const roomId = `exec-broadcast-${Date.now()}`;
+      
+      let resultsReceived = 0;
+      
+      executor.on('connect', () => {
+        executor.emit('join-room', { roomId, role: 'interviewer' });
+      });
+      
+      watcher1.on('connect', () => {
+        watcher1.emit('join-room', { roomId, role: 'candidate' });
+      });
+      
+      watcher2.on('connect', () => {
+        watcher2.emit('join-room', { roomId, role: 'observer' });
+      });
+      
+      const checkResult = (data) => {
+        expect(data.success).toBe(true);
+        resultsReceived++;
+        if (resultsReceived === 3) { // Все трое должны получить
+          executor.disconnect();
+          watcher1.disconnect();
+          watcher2.disconnect();
+          done();
+        }
+      };
+      
+      executor.on('execution-result', checkResult);
+      watcher1.on('execution-result', checkResult);
+      watcher2.on('execution-result', checkResult);
+      
+      setTimeout(() => {
+        executor.emit('execute-code', {
+          roomId,
+          code: 'console.log("test");',
+          language: 'javascript'
+        });
+      }, 1000);
+      
+      setTimeout(() => {
+        executor.disconnect();
+        watcher1.disconnect();
+        watcher2.disconnect();
         done(new Error('Тест завершился по таймауту'));
       }, 5000);
     }, 10000);

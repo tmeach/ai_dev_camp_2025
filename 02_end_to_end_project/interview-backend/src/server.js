@@ -317,8 +317,9 @@ socket.on('execute-code', async (data) => {
       if (participantIndex > -1) {
         room.participants.splice(participantIndex, 1);
         
-        // Уведомляем остальных
-        socket.to(roomId).emit('user-left', {
+        // Уведомляем остальных - используем io.to() вместо socket.to()
+        // потому что socket уже отключен и не может отправлять сообщения
+        io.to(roomId).emit('user-left', {
           roomId,
           userId: socket.id,
           participantsCount: room.participants.length
