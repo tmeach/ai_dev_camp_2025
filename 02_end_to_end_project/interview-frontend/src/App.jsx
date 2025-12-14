@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import LanguageSelector from './components/LanguageSelector';
 import CodeEditor from './components/CodeEditor';
 import socketService from './services/socket';
+import codeExecutor from './services/codeExecutor';
 import './App.css';
 
 function App() {
@@ -13,6 +14,8 @@ function App() {
   const [participants, setParticipants] = useState(1);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [pyodideStatus, setPyodideStatus] = useState('not_loaded');
 
   // Инициализация комнаты и подключение
   useEffect(() => {
@@ -160,55 +163,62 @@ function App() {
     setOutput(prev => `${prev}\n// 🌐 Language changed to ${newLanguage}`);
   };
 
-  const handleRunCode = () => {
-    if (language === 'javascript') {
-      try {
-        // Локальное выполнение
-        const originalConsoleLog = console.log;
-        let logOutput = '';
-        
-        console.log = (...args) => {
-          logOutput += args.map(arg => 
-            typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-          ).join(' ') + '\n';
-        };
-        
-        let returnValue = '';
-        try {
-          const fn = new Function('return (' + code + ')');
-          const result = fn();
-          if (result !== undefined) {
-            returnValue = `Return value: ${JSON.stringify(result, null, 2)}`;
-          }
-        } catch (evalError) {
-          const fn = new Function(code);
-          const result = fn();
-          if (result !== undefined) {
-            returnValue = `Return value: ${JSON.stringify(result, null, 2)}`;
-          }
-        }
-        
-        console.log = originalConsoleLog;
-        
-        const outputText = `🖥️ Local Execution (${new Date().toLocaleTimeString()}):\n\n${logOutput || '// No console output'}\n${returnValue ? returnValue + '\n' : ''}✅ Execution successful`;
-        
-        setOutput(outputText);
-        
-        // Отправляем на сервер для других участников
-        if (socketService.isConnected()) {
-          socketService.requestCodeExecution(code, language);
-        }
-      } catch (err) {
-        setOutput(`❌ Local Execution Error (${new Date().toLocaleTimeString()}):\n\n${err.toString()}`);
+  const handleRunCode = async () => {
+    setIsExecuting(true);
+    
+    try {
+      // Check if language is supported for WASM execution
+      if (!codeExecutor.isLanguageSupported(language)) {
+        setOutput(`❌ ${language} execution is not supported in browser.\nOnly JavaScript and Python are supported via WASM.`);
+        setIsExecuting(false);
+        return;
       }
-    } else {
-      // Для других языков - только серверное выполнение
-      if (socketService.isConnected()) {
-        socketService.requestCodeExecution(code, language);
-        setOutput(`📤 Sent ${language} code to server for execution...\nWaiting for result...`);
+
+      // For Python, show loading message if Pyodide is not loaded
+      if (language === 'python' && !codeExecutor.isPyodideLoaded()) {
+        setOutput(`🐍 Loading Python runtime (Pyodide)...\nThis may take a few seconds on first run.`);
+        setPyodideStatus('loading');
+      }
+
+      // Execute code using WASM
+      const result = await codeExecutor.execute(code, language);
+      
+      // Update Pyodide status
+      if (language === 'python' && codeExecutor.isPyodideLoaded()) {
+        setPyodideStatus('loaded');
+      }
+
+      // Format output
+      const timestamp = new Date().toLocaleTimeString();
+      let outputText = `⚡ WASM Execution (${timestamp}):\n\n`;
+      
+      if (result.success) {
+        outputText += result.output;
+        outputText += `\n\n✅ Execution successful (${result.executionTime}ms)`;
       } else {
-        setOutput(`❌ Cannot execute ${language}: WebSocket not connected`);
+        outputText += `❌ Error:\n${result.error}`;
+        if (result.output) {
+          outputText += `\n\nOutput:\n${result.output}`;
+        }
       }
+      
+      setOutput(outputText);
+      
+      // Send result to other participants via WebSocket
+      if (socketService.isConnected()) {
+        socketService.emit('execution-result', {
+          roomId,
+          output: result.output,
+          error: result.error,
+          success: result.success,
+          executionTime: result.executionTime,
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (err) {
+      setOutput(`❌ Execution Error (${new Date().toLocaleTimeString()}):\n\n${err.message}`);
+    } finally {
+      setIsExecuting(false);
     }
   };
 
@@ -396,19 +406,21 @@ function App() {
             </div>
             <button
               onClick={handleRunCode}
+              disabled={isExecuting}
               style={{
                 width: '100%',
                 padding: '12px',
-                background: '#10b981',
+                background: isExecuting ? '#6b7280' : (codeExecutor.isLanguageSupported(language) ? '#10b981' : '#ef4444'),
                 color: 'white',
                 border: 'none',
                 borderRadius: '6px',
                 marginTop: '15px',
-                cursor: 'pointer',
-                fontWeight: 'bold'
+                cursor: isExecuting ? 'not-allowed' : 'pointer',
+                fontWeight: 'bold',
+                opacity: isExecuting ? 0.7 : 1
               }}
             >
-              ▶ Run Code ({language === 'javascript' ? 'Local + Server' : 'Server only'})
+              {isExecuting ? '⏳ Executing...' : `▶ Run Code (WASM)`}
             </button>
             <div style={{
               marginTop: '10px',
@@ -416,9 +428,11 @@ function App() {
               color: '#64748b',
               textAlign: 'center'
             }}>
-              {language === 'javascript' 
-                ? 'JavaScript runs locally + sends to server' 
-                : `${language} sends to server for execution`}
+              {codeExecutor.isLanguageSupported(language)
+                ? (language === 'python'
+                    ? `Python via Pyodide ${pyodideStatus === 'loaded' ? '✅' : pyodideStatus === 'loading' ? '⏳' : ''}`
+                    : 'JavaScript in browser')
+                : `${language} not supported in browser`}
             </div>
           </div>
 

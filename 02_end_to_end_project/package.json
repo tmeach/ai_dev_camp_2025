@@ -1,0 +1,29 @@
+{
+  "name": "online-interview-platform",
+  "version": "1.0.0",
+  "description": "Online coding interview platform with real-time collaboration",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd interview-backend && npm run dev",
+    "dev:frontend": "cd interview-frontend && npm run dev",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:backend": "cd interview-backend && npm start",
+    "start:frontend": "cd interview-frontend && npm run preview",
+    "test": "cd interview-backend && npm test",
+    "install:all": "npm install && cd interview-backend && npm install && cd ../interview-frontend && npm install",
+    "build": "cd interview-frontend && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": [
+    "interview",
+    "coding",
+    "real-time",
+    "collaboration",
+    "websocket"
+  ],
+  "author": "",
+  "license": "MIT"
+}

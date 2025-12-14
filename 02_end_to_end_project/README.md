@@ -6,7 +6,9 @@
 
 - ✅ **Real-time синхронизация кода** между всеми участниками
 - ✅ **Поддержка множества языков**: JavaScript, Python, Java, C, C++
-- ✅ **Выполнение кода** (JavaScript в браузере, другие языки на сервере)
+- ✅ **Подсветка синтаксиса** с помощью CodeMirror 6 для всех языков
+- ✅ **Выполнение кода через WASM** (JavaScript встроенно, Python через Pyodide)
+- ✅ **Безопасное выполнение** - код выполняется только в браузере, не на сервере
 - ✅ **Управление комнатами** с уникальными ссылками
 - ✅ **Роли участников**: интервьюер и кандидат
 - ✅ **WebSocket соединение** для мгновенной синхронизации
@@ -21,8 +23,22 @@
 
 ### Установка и запуск
 
-#### 1. Backend сервер
+#### Вариант 1: Запуск обоих сервисов одновременно (рекомендуется)
 
+```bash
+# Установка всех зависимостей
+npm run install:all
+
+# Запуск backend и frontend одновременно
+npm run dev
+```
+
+Backend запустится на `http://localhost:3001`
+Frontend откроется на `http://localhost:5173`
+
+#### Вариант 2: Запуск сервисов по отдельности
+
+**Backend сервер:**
 ```bash
 cd interview-backend
 npm install
@@ -31,8 +47,7 @@ npm run dev
 
 Сервер запустится на `http://localhost:3001`
 
-#### 2. Frontend приложение
-
+**Frontend приложение:**
 ```bash
 cd interview-frontend
 npm install
@@ -40,6 +55,55 @@ npm run dev
 ```
 
 Приложение откроется на `http://localhost:5173`
+
+#### Вариант 3: Запуск через Docker (production-ready)
+
+**Требования:**
+- Docker и Docker Compose установлены
+
+**Запуск с помощью Docker Compose (рекомендуется):**
+```bash
+# Сборка и запуск контейнера
+docker-compose up --build
+
+# Или в фоновом режиме
+docker-compose up -d --build
+
+# Просмотр логов
+docker-compose logs -f
+
+# Остановка
+docker-compose down
+```
+
+**Запуск с помощью Docker напрямую:**
+```bash
+# Сборка образа
+docker build -t interview-platform .
+
+# Запуск контейнера
+docker run -p 3001:3001 interview-platform
+
+# Или в фоновом режиме
+docker run -d -p 3001:3001 --name interview-platform interview-platform
+
+# Просмотр логов
+docker logs -f interview-platform
+
+# Остановка
+docker stop interview-platform
+docker rm interview-platform
+```
+
+Приложение будет доступно на `http://localhost:3001`
+
+**Особенности Docker версии:**
+- ✅ Frontend и Backend в одном контейнере
+- ✅ Multi-stage build для оптимизации размера образа
+- ✅ Production-ready конфигурация
+- ✅ Health check для мониторинга
+- ✅ Автоматический restart при падении
+- ✅ Минимальный размер образа (Node.js Alpine)
 
 ### Конфигурация
 
@@ -114,10 +178,13 @@ npm test -- integration.test.js
 
 - **Редактирование**: Просто начните печатать - изменения синхронизируются автоматически
 - **Смена языка**: Выберите язык из списка - все участники увидят изменение
-- **Запуск кода**: 
-  - Нажмите кнопку "Run Code"
+- **Запуск кода**:
+  - Нажмите кнопку "▶ Run Code (WASM)"
   - Или используйте `Ctrl+Enter` (⌘+Enter на Mac)
-- **Результаты**: Все участники видят результат выполнения
+  - **JavaScript** выполняется мгновенно в браузере
+  - **Python** выполняется через Pyodide (первый запуск может занять несколько секунд для загрузки)
+- **Результаты**: Все участники видят результат выполнения в реальном времени
+- **Безопасность**: Код выполняется только в браузере пользователя, не на сервере
 
 ### Тестирование синхронизации
 
@@ -168,6 +235,8 @@ interview-frontend/
 - React 18 - UI фреймворк
 - Vite - Build tool и dev server
 - Socket.IO Client - WebSocket клиент
+- CodeMirror 6 - Редактор кода с подсветкой синтаксиса
+- Pyodide - Python в браузере через WebAssembly
 - React Icons - Иконки
 
 ## 📡 API Reference
@@ -410,16 +479,66 @@ npm test -- --verbose
 npm test -- -t "Клиент может подключиться"
 ```
 
+### Docker проблемы
+
+**Контейнер не запускается:**
+```bash
+# Проверьте логи
+docker-compose logs
+
+# Пересоберите образ с нуля
+docker-compose down
+docker-compose build --no-cache
+docker-compose up
+```
+
+**Порт 3001 занят:**
+```bash
+# Найдите процесс
+lsof -i :3001
+
+# Или измените порт в docker-compose.yml
+ports:
+  - "3002:3001"  # Внешний порт 3002
+```
+
+**Образ слишком большой:**
+```bash
+# Проверьте размер
+docker images interview-platform
+
+# Убедитесь что .dockerignore работает
+cat .dockerignore
+
+# Пересоберите
+docker-compose build --no-cache
+```
+
+**Не видно изменений после пересборки:**
+```bash
+# Остановите и удалите контейнер
+docker-compose down
+
+# Удалите старый образ
+docker rmi interview-platform
+
+# Пересоберите
+docker-compose up --build
+```
+
 ## 📝 Roadmap
 
-- [ ] Добавить поддержку выполнения Python/Java/C++ на сервере
-- [ ] Добавить syntax highlighting (CodeMirror/Monaco)
+- [x] Добавить syntax highlighting (CodeMirror 6) для всех языков
+- [x] Добавить выполнение JavaScript через WASM (встроенно в браузер)
+- [x] Добавить выполнение Python через Pyodide (WASM)
+- [ ] Добавить поддержку выполнения Java/C++ через WASM (если возможно)
 - [ ] Добавить сохранение истории изменений
 - [ ] Добавить видео/аудио чат
 - [ ] Добавить whiteboard для рисования
 - [ ] Добавить аутентификацию пользователей
 - [ ] Добавить сохранение сессий в базу данных
 - [ ] Добавить E2E тесты (Playwright/Cypress)
+- [ ] Добавить автодополнение кода (IntelliSense)
 
 ## 🤝 Contributing
 

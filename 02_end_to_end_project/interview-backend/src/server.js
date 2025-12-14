@@ -2,23 +2,35 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
+
+// Определяем, работаем ли мы в production режиме
+const isProduction = process.env.NODE_ENV === 'production';
+
 const io = socketIo(server, {
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: isProduction ? '*' : (process.env.CORS_ORIGIN || 'http://localhost:5173'),
     methods: ['GET', 'POST']
   }
 });
 
 // Middleware
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: isProduction ? '*' : (process.env.CORS_ORIGIN || 'http://localhost:5173'),
   credentials: true
 }));
 app.use(express.json());
+
+// В production режиме раздаем статические файлы frontend
+if (isProduction) {
+  const frontendPath = path.join(__dirname, '../../frontend/dist');
+  app.use(express.static(frontendPath));
+  console.log(`📦 Serving static files from: ${frontendPath}`);
+}
 
 // Хранилище комнат (временное, в памяти)
 const rooms = new Map();
@@ -62,6 +74,16 @@ app.get('/api/rooms/:roomId', (req, res) => {
   res.json(room);
 });
 
+// В production режиме все неизвестные маршруты возвращают index.html (для SPA)
+if (isProduction) {
+  app.get('*', (req, res) => {
+    // Пропускаем API маршруты
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ error: 'API endpoint not found' });
+    }
+    res.sendFile(path.join(__dirname, '../../frontend/dist/index.html'));
+  });
+}
 
 // Выполнить код безопасно
 app.post('/api/execute', (req, res) => {
